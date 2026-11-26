@@ -8,69 +8,37 @@ InstallMouseHook()
 OnExit(ReleaseAlt)
 
 Layer1Used := false
-Layer2Used := false
+ForwardButtonHeld := false
 AltHeld := false
 
 ; F12::KeyHistory()
 
-; Layer buttons
-
-*MButton::{
-    global Layer1Used, Layer2Used
-
-    ReleaseAlt()
-    Layer1Used := false
-
-    if GetKeyState("XButton1", "P") {
-        Layer1Used := true
-        Layer2Used := true
-        Send "^r"
-        return
-    }
-
-    if GetKeyState("LButton", "P")
-        || GetKeyState("RButton", "P")
-        MarkLayerUsed()
-}
-
-*MButton Up::{
-    global Layer1Used
-
-    if !Layer1Used
-        Send "{MButton}"
-
-    Layer1Used := false
-}
+; Layer button
 
 *XButton1::{
-    global Layer1Used, Layer2Used
+    global Layer1Used
 
     ReleaseAlt()
-    Layer2Used := false
-
-    if GetKeyState("MButton", "P") {
-        Layer1Used := true
-        Layer2Used := true
-        Send "!{Right}"
-        return
-    }
+    Layer1Used := false
 
     if GetKeyState("LButton", "P")
         || GetKeyState("RButton", "P")
+        || GetKeyState("MButton", "P")
         MarkLayerUsed()
 }
 
 *XButton1 Up::{
-    global Layer2Used
+    global Layer1Used
 
-    if !Layer2Used
+    if !Layer1Used
         Send "{XButton1}"
 
-    Layer2Used := false
+    Layer1Used := false
 }
 
 ~*LButton::MarkLayerUsed()
 ~*RButton::MarkLayerUsed()
+~*MButton::MarkLayerUsed()
 
 ; Layer 0
 
@@ -92,18 +60,28 @@ F18::SendAction("^+{Tab}")
 *NumpadDiv::AppSwitch(true)
 *F15::AppSwitch(false)
 
-; Layer 1: hold MButton
+; Layer 1: hold XButton1
 
-#HotIf GetKeyState("MButton", "P")
+#HotIf GetKeyState("XButton1", "P")
 
-*NumpadDiv::AdjustBrightness(-5)
-*F15::AdjustBrightness(5)
+*MButton::{
+    global ForwardButtonHeld
+
+    ForwardButtonHeld := true
+    SendAction("!{Right}")
+}
+
+*NumpadDiv::SendAction("{WheelLeft}")
+*F15::SendAction("{WheelRight}")
+
+WheelUp::SendAction("{PgDn}")
+WheelDown::SendAction("{PgUp}")
 
 NumpadAdd::SendAction("^{WheelUp}")
 F18::SendAction("^{WheelDown}")
 
 Numpad1::
-NumpadEnd::SendAction("#v")
+NumpadEnd::SendAction("^a")
 
 Numpad2::
 NumpadDown::SendAction("^+v")
@@ -114,37 +92,23 @@ NumpadPgDn::SendAction("{Volume_Down}")
 Numpad4::
 NumpadLeft::SendAction("{Volume_Up}")
 
-~*WheelUp::MarkLayerUsed()
-~*WheelDown::MarkLayerUsed()
+; Suppress release even if the layer button was released first.
 
-; Layer 2: hold XButton1
+#HotIf ForwardButtonHeld
 
-#HotIf GetKeyState("XButton1", "P")
+*MButton Up::{
+    global ForwardButtonHeld
 
-*NumpadDiv::SendAction("{WheelLeft}")
-*F15::SendAction("{WheelRight}")
-
-WheelUp::SendAction("{PgUp}")
-WheelDown::SendAction("{PgDn}")
-
-Numpad1::
-NumpadEnd::SendAction("^w"
-
-)
-
-Numpad2::
-NumpadDown::SendAction("^+t")
+    ForwardButtonHeld := false
+}
 
 #HotIf
 
 MarkLayerUsed() {
-    global Layer1Used, Layer2Used
-
-    if GetKeyState("MButton", "P")
-        Layer1Used := true
+    global Layer1Used
 
     if GetKeyState("XButton1", "P")
-        Layer2Used := true
+        Layer1Used := true
 }
 
 SendAction(keys) {
@@ -181,38 +145,5 @@ ReleaseAlt(*) {
             SendEvent "{Blind}{LAlt up}"
 
         AltHeld := false
-    }
-}
-
-AdjustBrightness(step) {
-    MarkLayerUsed()
-    ReleaseAlt()
-
-    try {
-        wmi := ComObjGet("winmgmts:\\.\root\WMI")
-
-        monitors := wmi.ExecQuery(
-            "SELECT * FROM WmiMonitorBrightness WHERE Active=TRUE"
-        )
-
-        methods := wmi.ExecQuery(
-            "SELECT * FROM WmiMonitorBrightnessMethods WHERE Active=TRUE"
-        )
-
-        for monitor in monitors {
-            level := Max(5, Min(100,
-                monitor.CurrentBrightness + step))
-
-            for method in methods {
-                if method.InstanceName = monitor.InstanceName {
-                    method.WmiSetBrightness(0, level)
-                    break
-                }
-            }
-        }
-    }
-    catch {
-        ToolTip "Brightness control unavailable"
-        SetTimer () => ToolTip(), -1000
     }
 }
